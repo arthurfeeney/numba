@@ -497,23 +497,41 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
             got = cfunc(arr, obj)
             self.assertPreciseEqual(expected, got)
 
+    def test_array_equal_exception(self):
+        pyfunc = array_equal
+        cfunc = jit(nopython=True)(pyfunc)
+
+        with self.assertRaises(TypingError) as raises:
+            cfunc(np.arange(3 * 4).reshape(3, 4), None)
+        self.assertIn(
+            'Both arguments to "array_equals" must be array-like',
+            str(raises.exception)
+        )
+
     def test_isclose(self):
         def array_pairs():
             yield np.array([]), np.array([])
-            yield np.array([0, 1]), np.array([1e-7, 1])
+            yield np.array([0, 1]), np.array([1e-9, 1])
             yield np.array([]), np.array([1])
             yield np.array([np.nan, 0, 0]), np.array([np.nan, 0, 1e-10])
             yield np.array([np.nan, 0, 0]), np.array([np.inf, 0, 1e-10])
             yield np.zeros(3), np.zeros((3, 5, 3)) + 1e-8
+            x = np.zeros((3, 5, 3))
+            x[1, 3, 2] = 1.0
+            yield np.zeros(3), x
             yield (0, 1), (1e-9, 1)
+            x = np.arange(10)
+            x[1] = 2
+            yield x, x
+            yield np.arange(10), x
             yield True, False
+            yield 0, 1e-4
             yield 0, 1e-9
             yield 0, False
             yield np.nan, np.nan
             yield np.inf, np.nan
             yield -np.inf, np.inf
             yield np.inf, np.inf
-            yield np.arange(200), np.arange(200) + 1e-9
 
         def tols():
             yield 1e-5, 1e-8, False
@@ -528,15 +546,14 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
                 got = cfunc(a, b, rtol, atol, equal_nan)
                 self.assertPreciseEqual(expected, got)
 
-
-    def test_array_equal_exception(self):
-        pyfunc = array_equal
+    def test_isclose_exception(self):
+        pyfunc = isclose
         cfunc = jit(nopython=True)(pyfunc)
 
         with self.assertRaises(TypingError) as raises:
-            cfunc(np.arange(3 * 4).reshape(3, 4), None)
+            cfunc(np.arange(3 * 4).reshape(3, 4), None, 1e-5, 1e-8, False)
         self.assertIn(
-            'Both arguments to "array_equals" must be array-like',
+            'Arguments a, b to "isclose" must be array-like',
             str(raises.exception)
         )
 
