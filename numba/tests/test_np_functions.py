@@ -41,6 +41,10 @@ def array_equal(a, b):
     return np.array_equal(a, b)
 
 
+def isclose(a, b, rtol, atol, equal_nan):
+    return np.isclose(a, b, rtol, atol, equal_nan)
+
+
 def append(arr, values, axis):
     return np.append(arr, values, axis=axis)
 
@@ -492,6 +496,38 @@ class TestNPFunctions(MemoryLeakMixin, TestCase):
             expected = pyfunc(arr, obj)
             got = cfunc(arr, obj)
             self.assertPreciseEqual(expected, got)
+
+    def test_isclose(self):
+        def array_pairs():
+            yield np.array([]), np.array([])
+            yield np.array([0, 1]), np.array([1e-7, 1])
+            yield np.array([]), np.array([1])
+            yield np.array([np.nan, 0, 0]), np.array([np.nan, 0, 1e-10])
+            yield np.array([np.nan, 0, 0]), np.array([np.inf, 0, 1e-10])
+            yield np.zeros(3), np.zeros((3, 5, 3)) + 1e-8
+            yield (0, 1), (1e-9, 1)
+            yield True, False
+            yield 0, 1e-9
+            yield 0, False
+            yield np.nan, np.nan
+            yield np.inf, np.nan
+            yield -np.inf, np.inf
+            yield np.inf, np.inf
+            yield np.arange(200), np.arange(200) + 1e-9
+
+        def tols():
+            yield 1e-5, 1e-8, False
+            yield 1e-5, 1e-8, True
+            yield 2, 2, True
+
+        pyfunc = isclose
+        cfunc = jit(nopython=True)(pyfunc)
+        for a, b in array_pairs():
+            for rtol, atol, equal_nan in tols():
+                expected = pyfunc(a, b, rtol, atol, equal_nan)
+                got = cfunc(a, b, rtol, atol, equal_nan)
+                self.assertPreciseEqual(expected, got)
+
 
     def test_array_equal_exception(self):
         pyfunc = array_equal

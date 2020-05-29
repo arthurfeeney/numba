@@ -3272,6 +3272,46 @@ def np_array_equal(a, b):
     return impl
 
 
+@overload(np.isclose)
+def np_isclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
+    if not (type_can_asarray(a) and type_can_asarray(b)):
+        raise TypingError('Arguments a, b to "isclose" must be array-like')
+
+    @register_jitable
+    def within_tol(a, b, rtol, atol):
+        return np.abs(a - b) <= atol + rtol * np.abs(b)
+
+    accepted = (types.Boolean, types.Number)
+    if isinstance(a, accepted) and isinstance(b, accepted):
+        def isclose_impl(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
+            if np.isnan(a) or np.isnan(b):
+                if equal_nan:
+                    return np.isnan(a) and np.isnan(b)
+                return False
+            elif not (np.isfinite(a) and np.isfinite(b)):
+                return a == b
+            return within_tol(a, b, rtol, atol)
+    else:
+        def isclose_impl(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
+            a = np.asarray(a)
+            b = np.asarray(b)
+            afin = np.isfinite(a)
+            bfin = np.isfinite(b)
+            if np.all(afin) and np.all(bfin):
+                return within_tol(a, b, rtol, atol)
+            else:
+                # check finite values are within tol and non-finite are equal
+                finite = afin * bfin
+                values_within_tol = within_tol(a, b, rtol, atol)
+                values_equal = a == b
+                if equal_nan:
+                    both_nan = np.isnan(a) * np.isnan(b)
+                    values_equal += both_nan
+                return np.where(finite, values_within_tol, values_equal)
+
+    return isclose_impl
+
+
 def validate_1d_array_like(func_name, seq):
     if isinstance(seq, types.Array):
         if seq.ndim != 1:
